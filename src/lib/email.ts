@@ -6,16 +6,16 @@ import { resend } from "../utils/resend";
 import { generateVerificationCode, getOtpExpiresAt } from "./otp";
 
 export async function sendOtpEmail(params: {
-  email: string;
-  code: string;
-  purpose: VerificationPurpose;
+	email: string;
+	code: string;
+	purpose: VerificationPurpose;
 }) {
-  const subject =
-    params.purpose === VerificationPurpose.VERIFY_EMAIL
-      ? "Kode verifikasi email"
-      : "Kode reset password";
+	const subject =
+		params.purpose === VerificationPurpose.VERIFY_EMAIL
+			? "Kode verifikasi email"
+			: "Kode reset password";
 
-  const html = `
+	const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.6;">
       <h2>${subject}</h2>
       <p>Kode OTP kamu:</p>
@@ -24,48 +24,48 @@ export async function sendOtpEmail(params: {
     </div>
   `;
 
-  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
-    console.log(
-      `[DEV OTP] ${params.purpose} | ${params.email} | ${params.code}`,
-    );
-    return;
-  }
+	if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
+		console.log(
+			`[DEV OTP] ${params.purpose} | ${params.email} | ${params.code}`,
+		);
+		return;
+	}
 
-  const { error } = await resend.emails.send({
-    from: env.EMAIL_FROM,
-    to: [params.email],
-    subject,
-    html,
-  });
+	const { error } = await resend.emails.send({
+		from: env.EMAIL_FROM,
+		to: [params.email],
+		subject,
+		html,
+	});
 
-  if (error) {
-    throw new HTTPException(500, {
-      message: error.message || "Gagal mengirim OTP email",
-    });
-  }
+	if (error) {
+		throw new HTTPException(500, {
+			message: error.message || "Gagal mengirim OTP email",
+		});
+	}
 }
 
 export async function upsertVerificationCode(
-  userId: string,
-  purpose: VerificationPurpose,
+	userId: string,
+	purpose: VerificationPurpose,
 ) {
-  const code = generateVerificationCode();
-  const expiresAt = getOtpExpiresAt();
+	const code = generateVerificationCode();
+	const expiresAt = getOtpExpiresAt();
 
-  return prisma.verificationCode.upsert({
-    where: {
-      userId,
-      purpose,
-    },
-    update: {
-      code,
-      expiresAt,
-    },
-    create: {
-      userId,
-      purpose,
-      code,
-      expiresAt,
-    },
-  });
+	return prisma.verificationCode.upsert({
+		where: {
+			userId,
+			purpose,
+		},
+		update: {
+			code,
+			expiresAt,
+		},
+		create: {
+			userId,
+			purpose,
+			code,
+			expiresAt,
+		},
+	});
 }

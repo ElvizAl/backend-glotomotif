@@ -1,0 +1,323 @@
+import { HTTPException } from "hono/http-exception";
+import { VerificationPurpose } from "../../generated/prisma/enums";
+import { sendOtpEmail, upsertVerificationCode } from "../../lib/email";
+import { google } from "../../utils/arctic";
+import { hashPassword, verifyPassword } from "../../utils/hash";
+import { signAccessToken } from "../../utils/jwt";
+import { prisma } from "../../utils/prisma";
+import type {
+	ForgotPasswordInput,
+	LoginInput,
+	RegisterInput,
+	ResetPasswordInput,
+	VerifyEmailOtpInput,
+} from "./auth.schema";
+
+export async function registerService(data: RegisterInput) {
+	const existingUser = await prisma.user.findUnique({
+		where: { email: data.email },
+	});
+
+	if (existingUser) {
+		throw new HTTPException(400, { message: "Email sudah terdaftar" });
+	}
+
+	const passwordHash = await hashPassword(data.password);
+
+	const user = await prisma.user.create({
+		data: {
+			name: data.name,
+			email: data.email,
+			password: passwordHash,
+		},
+	});
+
+	const verificationCode = await upsertVerificationCode(
+		user.id,
+		VerificationPurpose.VERIFY_EMAIL,
+	);
+
+	await sendOtpEmail({
+		email: user.email,
+		code: verificationCode.code,
+		purpose: VerificationPurpose.VERIFY_EMAIL,
+	});
+
+	return {
+		message: "Register berhasil, silahkan verifikasi email OTP",
+		user: {
+			id: user.id,
+			name: user.name,
+			email: user.email,
+		},
+	};
+}
+
+export async function verifyEmailOtpService(data: VerifyEmailOtpInput) {
+	const user = await prisma.user.findUnique({ where: { email: data.email } });
+
+	if (!user) {
+		throw new HTTPException(404, { message: "User tidak ditemukan" });
+	}
+
+	const verificationCode = await prisma.verificationCode.findUnique({
+		where: {
+			userId: user.id,
+			purpose: VerificationPurpose.VERIFY_EMAIL,
+		},
+	});
+
+	if (!verificationCode) {
+		throw new HTTPException(404, {
+			message: "Verification code tidak ditemukan",
+		});
+	}
+
+	if (verificationCode.expiresAt < new Date()) {
+		await prisma.verificationCode.delete({
+			where: { id: verificationCode.id },
+		});
+		throw new HTTPException(400, {
+			message: "Verifikasi kode sudah tidak berlaku",
+		});
+	}
+
+	if (verificationCode.code !== data.code) {
+		throw new HTTPException(400, { message: "Kode verifikasi tidak valid" });
+	}
+
+	await prisma.$transaction([
+		prisma.user.update({
+			where: { id: user.id },
+			data: { isVerified: true },
+		}),
+		prisma.verificationCode.delete({
+			where: { id: verificationCode.id },
+		}),
+	]);
+
+	return { message: "Email berhasil diverifikasi" };
+}
+
+export async function resendVerificationOtpService(input: { email: string }) {
+	const user = await prisma.user.findUnique({ where: { email: input.email } });
+
+	if (!user) {
+		throw new HTTPException(404, { message: "User tidak ditemukan" });
+	}
+
+	if (user.isVerified) {
+		throw new HTTPException(400, { message: "Email sudah diverifikasi" });
+	}
+
+	const verificationCode = await upsertVerificationCode(
+		user.id,
+		VerificationPurpose.VERIFY_EMAIL,
+	);
+	await sendOtpEmail({
+		email: user.email,
+		code: verificationCode.code,
+		purpose: VerificationPurpose.VERIFY_EMAIL,
+	});
+
+	return { message: "Verification OTP berhasil dikirim ulang" };
+}
+
+export async function loginService(data: LoginInput) {
+	const existingUser = await prisma.user.findUnique({
+		where: { email: data.email },
+	});
+
+	if (!existingUser) {
+		throw new HTTPException(404, { message: "User tidak ditemukan" });
+	}
+
+	if (existingUser.onBanned) {
+		throw new HTTPException(403, { message: "User dibanned" });
+	}
+
+	const isPasswordValid = await verifyPassword(
+		data.password,
+		existingUser.password as string,
+	);
+
+	if (!isPasswordValid) {
+		throw new HTTPException(400, { message: "Email atau password salah" });
+	}
+
+	if (!existingUser.isVerified) {
+		throw new HTTPException(403, { message: "Email belum diverifikasi" });
+	}
+
+	const accessToken = signAccessToken({
+		sub: existingUser.id,
+		email: existingUser.email,
+		role: existingUser.role,
+	});
+
+	return {
+		message: "Login berhasil",
+		accessToken,
+	};
+}
+
+export async function forgotPasswordService(data: ForgotPasswordInput) {
+	const user = await prisma.user.findUnique({ where: { email: data.email } });
+
+	if (!user) {
+		throw new HTTPException(404, { message: "User tidak ditemukan" });
+	}
+
+	const verificationCode = await upsertVerificationCode(
+		user.id,
+		VerificationPurpose.RESET_PASSWORD,
+	);
+	await sendOtpEmail({
+		email: user.email,
+		code: verificationCode.code,
+		purpose: VerificationPurpose.RESET_PASSWORD,
+	});
+
+	return { message: "Verification OTP berhasil dikirim ulang" };
+}
+
+export async function resetPasswordService(data: ResetPasswordInput) {
+	const user = await prisma.user.findUnique({ where: { email: data.email } });
+
+	if (!user) {
+		throw new HTTPException(404, { message: "User tidak ditemukan" });
+	}
+
+	const verificationCode = await prisma.verificationCode.findUnique({
+		where: {
+			userId: user.id,
+			purpose: VerificationPurpose.RESET_PASSWORD,
+		},
+	});
+
+	if (!verificationCode) {
+		throw new HTTPException(404, {
+			message: "Verification code tidak ditemukan",
+		});
+	}
+
+	if (verificationCode.expiresAt < new Date()) {
+		await prisma.verificationCode.delete({
+			where: { id: verificationCode.id },
+		});
+		throw new HTTPException(400, {
+			message: "Verifikasi kode sudah tidak berlaku",
+		});
+	}
+
+	if (verificationCode.code !== data.code) {
+		throw new HTTPException(400, { message: "Kode verifikasi tidak valid" });
+	}
+
+	const passwordHash = await hashPassword(data.newPassword);
+
+	await prisma.$transaction([
+		prisma.user.update({
+			where: { id: user.id },
+			data: { password: passwordHash },
+		}),
+		prisma.verificationCode.delete({
+			where: { id: verificationCode.id },
+		}),
+	]);
+
+	return { message: "Password berhasil direset" };
+}
+
+export async function getMeService(userId: string) {
+	const user = await prisma.user.findUnique({
+		where: { id: userId },
+		select: {
+			id: true,
+			name: true,
+			email: true,
+			role: true,
+			isVerified: true,
+			createdAt: true,
+			updatedAt: true,
+		},
+	});
+
+	if (!user) {
+		throw new HTTPException(404, { message: "User tidak ditemukan" });
+	}
+
+	return { user };
+}
+
+export async function googleCallbackService(
+	code: string,
+	codeVerifier: string,
+) {
+	// 1. Tukar authorization code dengan access token Google
+	let tokens: Awaited<ReturnType<typeof google.validateAuthorizationCode>>;
+	try {
+		tokens = await google.validateAuthorizationCode(code, codeVerifier);
+	} catch {
+		throw new HTTPException(400, { message: "Authorization code tidak valid" });
+	}
+
+	const accessToken = tokens.accessToken();
+
+	// 2. Ambil data user dari Google
+	const googleUserRes = await fetch(
+		"https://www.googleapis.com/oauth2/v3/userinfo",
+		{
+			headers: { Authorization: `Bearer ${accessToken}` },
+		},
+	);
+
+	if (!googleUserRes.ok) {
+		throw new HTTPException(500, {
+			message: "Gagal mengambil data dari Google",
+		});
+	}
+
+	const googleUser = (await googleUserRes.json()) as {
+		sub: string;
+		email: string;
+		name: string;
+		picture?: string;
+	};
+
+	// 3. Cek apakah user dibanned
+	const existingUser = await prisma.user.findUnique({
+		where: { email: googleUser.email },
+	});
+
+	if (existingUser?.onBanned) {
+		throw new HTTPException(403, { message: "User dibanned" });
+	}
+
+	// 4. Upsert user (buat baru jika belum ada, atau pakai yang sudah ada)
+	const user = await prisma.user.upsert({
+		where: { email: googleUser.email },
+		update: {
+			// Update avatar jika ada dari Google
+			...(googleUser.picture && { avatarUrl: googleUser.picture }),
+		},
+		create: {
+			name: googleUser.name,
+			email: googleUser.email,
+			avatarUrl: googleUser.picture,
+			isVerified: true, // Email Google sudah terverifikasi
+		},
+	});
+
+	// 5. Issue JWT
+	const token = signAccessToken({
+		sub: user.id,
+		email: user.email,
+		role: user.role,
+	});
+
+	return {
+		message: "Login dengan Google berhasil",
+		accessToken: token,
+	};
+}
