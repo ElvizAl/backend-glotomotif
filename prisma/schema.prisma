@@ -1,0 +1,191 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  SELLER
+  BUYER
+  ADMIN
+}
+
+enum VerificationPurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
+enum StatusMobil {
+  TERSEDIA
+  TERJUAL
+}
+
+enum Transmisi {
+  MANUAL
+  OTOMATIS
+}
+
+enum StatusOrder {
+  MENUNGGU_BUKTI_PESANAN // Belum bayar Rp 500.000
+  MENUNGGU_DP            // Sudah bayar 500rb, tunggu DP 30% max 1 minggu
+  DIBATALKAN             // Lewat 1 minggu tidak bayar DP
+  MENUNGGU_PELUNASAN     // DP & KTP masuk, menunggu pelunasan saat STNK diproses
+  LUNAS_SIAP_SERAH       // Lunas, STNK selesai, tinggal ambil/antar
+  SELESAI                // Mobil sudah diterima buyer
+}
+
+enum StatusSurat {
+  BELUM_DIPROSES
+  SEDANG_DIPROSES
+  SELESAI
+}
+
+enum MetodePengambilan {
+  AMBIL_SENDIRI
+  DIANTAR
+}
+
+enum MetodeBayar {
+  TUNAI    // Langsung dapat kwitansi
+  TRANSFER // Perlu upload bukti transfer, kwitansi terbit setelah diverifikasi Admin
+}
+
+enum TipePembayaran {
+  BUKTI_PESANAN // Bayar Rp 500.000 di awal
+  DP            // Bayar 30% uang muka
+  PELUNASAN     // Bayar sisa harga
+}
+
+model User {
+  id               String            @id @default(cuid())
+  name             String
+  email            String            @unique
+  password         String?
+  avatarUrl        String?
+  isVerified       Boolean           @default(false)
+  onBanned         Boolean           @default(false)
+  role             Role              @default(BUYER)
+  verificationCode VerificationCode?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  profile          Profile?
+  orders           Order[]
+}
+
+model VerificationCode {
+  id        String              @id @default(cuid())
+  code      String
+  purpose   VerificationPurpose
+  expiresAt DateTime
+  userId    String              @unique
+  user      User                @relation(fields: [userId], references: [id])
+  createdAt DateTime            @default(now())
+}
+
+model Profile {
+  id        String    @id @default(cuid())
+  fullName  String
+  phone     String
+  email     String
+  gender    String?
+  birthDate DateTime?
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model mobil {
+  id          String      @id @default(cuid())
+  nama        String
+  merek       String?
+  model       String?
+  tahun       Int?
+  warna       String?
+  kilometer   String?
+  bahan_bakar String?
+  transmisi   Transmisi?
+  harga       Decimal     @db.Decimal(15, 2)
+  status      StatusMobil @default(TERSEDIA)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @default(now()) @updatedAt
+  fotomobils  Fotomobil[]
+  order       Order?
+}
+
+model Fotomobil {
+  id        String   @id @default(cuid())
+  url       String
+  isPrimary Boolean  @default(false)
+  mobilId   String
+  mobil     mobil    @relation(fields: [mobilId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Order {
+  id               String            @id @default(cuid())
+  buyerId          String
+  buyer            User              @relation(fields: [buyerId], references: [id])
+  mobilId          String            @unique // 1 mobil hanya bisa punya 1 order aktif
+  mobil            mobil             @relation(fields: [mobilId], references: [id])
+
+  // Keuangan (sesuai aturan Proyek-1)
+  buktiPesanan     Decimal           @default(500000) @db.Decimal(15, 2) // Fix Rp 500.000
+  persenDp         Int               @default(30)     // 30% dari harga
+  nominalDp        Decimal?          @db.Decimal(15, 2) // Nominal 30% yang disetor
+  sisaPelunasan    Decimal?          @db.Decimal(15, 2)
+
+  // Waktu (sesuai aturan Proyek-1)
+  tanggalPesan     DateTime          @default(now())
+  batasWaktuDp     DateTime          // H+7 dari tanggal pesan
+
+  // Dokumen & Status
+  ktpUrl           String?           // Upload fotocopy KTP
+  statusOrder      StatusOrder       @default(MENUNGGU_BUKTI_PESANAN)
+
+  // Surat (sesuai aturan Proyek-1)
+  statusStnk       StatusSurat       @default(BELUM_DIPROSES) // Target 2 minggu
+  statusBpkb       StatusSurat       @default(BELUM_DIPROSES) // Target 2 bulan
+
+  // Pengiriman (sesuai aturan Proyek-1)
+  metodePengambilan MetodePengambilan?
+  alamatKirim      String?           // Diisi jika memilih DIANTAR
+  suratJalanUrl    String?           // Bukti surat jalan jika diantar
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  pembayaran       Pembayaran[]
+}
+
+model Pembayaran {
+  id               String         @id @default(cuid())
+  orderId          String
+  order            Order          @relation(fields: [orderId], references: [id])
+
+  tipe             TipePembayaran // BUKTI_PESANAN, DP, atau PELUNASAN
+  metode           MetodeBayar
+
+  // Nominal diisi oleh Admin (baik tunai maupun transfer)
+  // Untuk TRANSFER: nullable dulu saat buyer upload bukti, admin isi saat verifikasi
+  nominal          Decimal?       @db.Decimal(15, 2)
+
+  // TRANSFER: buyer upload bukti → admin cek rekening → admin input nominal + verifikasi
+  buktiTransferUrl  String?       // Diisi Buyer saat transfer
+  sudahDiverifikasi Boolean       @default(false) // Admin set true setelah uang benar-benar diterima
+  verifiedAt        DateTime?     // Waktu Admin melakukan verifikasi
+
+  kwitansiUrl      String?        // Terbit setelah admin verifikasi (tunai: otomatis, transfer: setelah dicek)
+
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
