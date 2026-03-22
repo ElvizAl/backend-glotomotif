@@ -14,6 +14,7 @@ const envSchema = z.object({
 		.string()
 		.url()
 		.default("http://localhost:3000/api/auth/google/callback"),
+	FRONTEND_URL: z.string().url().default("https://www.glotomotif.my.id"),
 });
 
 export const env = envSchema.parse(process.env);

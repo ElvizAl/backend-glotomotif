@@ -134,5 +134,6 @@ export const authRouter = new Hono()
 		}
 
 		const result = await googleCallbackService(code, codeVerifier);
-		return c.json(result, 200);
+		const frontendUrl = process.env.FRONTEND_URL ?? "https://www.glotomotif.my.id";
+		return c.redirect(`${frontendUrl}/auth/callback?token=${result.accessToken}`);
 	});
