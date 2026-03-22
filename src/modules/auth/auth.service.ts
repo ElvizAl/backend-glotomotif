@@ -1,7 +1,6 @@
 import { HTTPException } from "hono/http-exception";
 import { VerificationPurpose } from "../../generated/prisma/enums";
 import { sendOtpEmail, upsertVerificationCode } from "../../lib/email";
-import { google } from "../../utils/arctic";
 import { hashPassword, verifyPassword } from "../../utils/hash";
 import { signAccessToken } from "../../utils/jwt";
 import { prisma } from "../../utils/prisma";
@@ -250,42 +249,12 @@ export async function getMeService(userId: string) {
 	return { user };
 }
 
-export async function googleCallbackService(
-	code: string,
-	codeVerifier: string,
-) {
-	// 1. Tukar authorization code dengan access token Google
-	let tokens: Awaited<ReturnType<typeof google.validateAuthorizationCode>>;
-	try {
-		tokens = await google.validateAuthorizationCode(code, codeVerifier);
-	} catch {
-		throw new HTTPException(400, { message: "Authorization code tidak valid" });
-	}
-
-	const accessToken = tokens.accessToken();
-
-	// 2. Ambil data user dari Google
-	const googleUserRes = await fetch(
-		"https://www.googleapis.com/oauth2/v3/userinfo",
-		{
-			headers: { Authorization: `Bearer ${accessToken}` },
-		},
-	);
-
-	if (!googleUserRes.ok) {
-		throw new HTTPException(500, {
-			message: "Gagal mengambil data dari Google",
-		});
-	}
-
-	const googleUser = (await googleUserRes.json()) as {
-		sub: string;
-		email: string;
-		name: string;
-		picture?: string;
-	};
-
-	// 3. Cek apakah user dibanned
+export async function googleCallbackService(googleUser: {
+	email: string;
+	name: string;
+	picture?: string;
+}) {
+	// 1. Cek apakah user dibanned
 	const existingUser = await prisma.user.findUnique({
 		where: { email: googleUser.email },
 	});
@@ -294,11 +263,10 @@ export async function googleCallbackService(
 		throw new HTTPException(403, { message: "User dibanned" });
 	}
 
-	// 4. Upsert user (buat baru jika belum ada, atau pakai yang sudah ada)
+	// 2. Upsert user (buat baru jika belum ada, atau pakai yang sudah ada)
 	const user = await prisma.user.upsert({
 		where: { email: googleUser.email },
 		update: {
-			// Update avatar jika ada dari Google
 			...(googleUser.picture && { avatarUrl: googleUser.picture }),
 		},
 		create: {
@@ -309,7 +277,7 @@ export async function googleCallbackService(
 		},
 	});
 
-	// 5. Issue JWT
+	// 3. Issue JWT
 	const token = signAccessToken({
 		sub: user.id,
 		email: user.email,

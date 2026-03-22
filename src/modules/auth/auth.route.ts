@@ -1,11 +1,9 @@
 import { zValidator } from "@hono/zod-validator";
-import { generateCodeVerifier, generateState } from "arctic";
+import { googleAuth } from "@hono/oauth-providers/google";
 import { Hono } from "hono";
-import { getCookie, setCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
 import { requireAuth } from "../../middleware/auth";
 import { env } from "../../config/env";
-import { google } from "../../utils/arctic";
 import {
   forgotPasswordSchema,
   loginSchema,
@@ -92,51 +90,30 @@ export const authRouter = new Hono()
     return c.json(result, 200);
   })
 
-  .get("/google", async (c) => {
-    const state = generateState();
-    const code = generateCodeVerifier();
-    const scopes = ["profile", "email"];
+  .get(
+    "/google",
+    googleAuth({
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      scope: ["openid", "email", "profile"],
+    }),
+    async (c) => {
+      const googleUser = c.get("user-google");
 
-    setCookie(c, "code", code, {
-      path: "/",
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      maxAge: 60 * 10,
-      sameSite: "Lax",
-    });
+      if (!googleUser) {
+        throw new HTTPException(400, {
+          message: "Gagal mengambil data dari Google",
+        });
+      }
 
-    setCookie(c, "google_state", state, {
-      path: "/",
-      secure: process.env.NODE_ENV === "production",
-      httpOnly: true,
-      maxAge: 60 * 10,
-      sameSite: "Lax",
-    });
-
-    const url = await google.createAuthorizationURL(state, code, scopes);
-
-    return c.redirect(url.href);
-  })
-
-  .get("/google/callback", async (c) => {
-    const { code, state } = c.req.query();
-    const codeVerifier = getCookie(c, "code");
-    const storedState = getCookie(c, "google_state");
-
-    if (!code || !codeVerifier) {
-      throw new HTTPException(400, {
-        message: "Parameter callback tidak lengkap",
+      const result = await googleCallbackService({
+        email: googleUser.email as string,
+        name: googleUser.name as string,
+        picture: googleUser.picture as string | undefined,
       });
-    }
 
-    if (!storedState || storedState !== state) {
-      throw new HTTPException(400, {
-        message: "State tidak valid (kemungkinan CSRF)",
-      });
-    }
-
-    const result = await googleCallbackService(code, codeVerifier);
-    return c.redirect(
-      `${env.FRONTEND_URL}/auth/callback?token=${result.accessToken}`,
-    );
-  });
+      return c.redirect(
+        `${env.FRONTEND_URL}/auth/callback?token=${result.accessToken}`,
+      );
+    },
+  );

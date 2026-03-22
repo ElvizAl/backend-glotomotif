@@ -10,10 +10,6 @@ const envSchema = z.object({
 	OTP_EXPIRES_MINUTES: z.coerce.number().default(5),
 	GOOGLE_CLIENT_ID: z.string().default(""),
 	GOOGLE_CLIENT_SECRET: z.string().default(""),
-	GOOGLE_REDIRECT_URI: z
-		.string()
-		.url()
-		.default("http://localhost:3000/api/auth/google/callback"),
 	FRONTEND_URL: z.string().url().default("https://www.glotomotif.my.id"),
 });
 
