@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
 import { requireAuth } from "../../middleware/auth";
+import { env } from "../../config/env";
 import { google } from "../../utils/arctic";
 import {
   forgotPasswordSchema,
@@ -23,7 +24,7 @@ import {
   resetPasswordService,
   verifyEmailOtpService,
 } from "./auth.service";
-import { env } from "../../config/env";
+
 
 export const authRouter = new Hono()
 
