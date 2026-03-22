@@ -113,7 +113,7 @@ export const authRouter = new Hono()
       });
 
       return c.redirect(
-        `${env.FRONTEND_URL}/auth/callback?token=${result.accessToken}`,
+        `${env.FRONTEND_URL}/callback?token=${result.accessToken}`,
       );
     },
   );
