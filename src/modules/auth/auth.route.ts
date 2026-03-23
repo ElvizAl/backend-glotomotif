@@ -5,6 +5,7 @@ import { HTTPException } from "hono/http-exception";
 import { env } from "../../config/env";
 import { requireAuth } from "../../middleware/auth";
 import {
+	changePasswordSchema,
 	forgotPasswordSchema,
 	loginSchema,
 	registerSchema,
@@ -13,6 +14,7 @@ import {
 	verifyEmailOtpSchema,
 } from "./auth.schema";
 import {
+	changePasswordService,
 	forgotPasswordService,
 	getMeService,
 	googleCallbackService,
@@ -88,6 +90,18 @@ export const authRouter = new Hono()
 		const result = await getMeService(user.sub);
 		return c.json(result, 200);
 	})
+
+	.post(
+		"/change-password",
+		requireAuth,
+		zValidator("json", changePasswordSchema),
+		async (c) => {
+			const userId = c.get("user").sub;
+			const body = c.req.valid("json");
+			const result = await changePasswordService(userId, body);
+			return c.json(result, 200);
+		},
+	)
 
 	.get(
 		"/google",

@@ -5,6 +5,7 @@ import { hashPassword, verifyPassword } from "../../utils/hash";
 import { signAccessToken } from "../../utils/jwt";
 import { prisma } from "../../utils/prisma";
 import type {
+	ChangePasswordInput,
 	ForgotPasswordInput,
 	LoginInput,
 	RegisterInput,
@@ -288,4 +289,36 @@ export async function googleCallbackService(googleUser: {
 		message: "Login dengan Google berhasil",
 		accessToken: token,
 	};
+}
+
+export async function changePasswordService(
+	userId: string,
+	data: ChangePasswordInput,
+) {
+	const user = await prisma.user.findUnique({ where: { id: userId } });
+
+	if (!user) {
+		throw new HTTPException(404, { message: "User tidak ditemukan" });
+	}
+
+	if (!user.password) {
+		throw new HTTPException(400, {
+			message: "Akun ini menggunakan login Google, tidak memiliki password",
+		});
+	}
+
+	const isValid = await verifyPassword(data.currentPassword, user.password);
+
+	if (!isValid) {
+		throw new HTTPException(400, { message: "Password lama tidak sesuai" });
+	}
+
+	const newHash = await hashPassword(data.newPassword);
+
+	await prisma.user.update({
+		where: { id: userId },
+		data: { password: newHash },
+	});
+
+	return { message: "Password berhasil diubah" };
 }
