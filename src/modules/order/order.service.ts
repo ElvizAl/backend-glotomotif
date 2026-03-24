@@ -358,3 +358,72 @@ export async function getDashboardStatsService() {
 		},
 	};
 }
+
+export async function getLaporanService(params: {
+	bulan?: number;
+	tahun?: number;
+}) {
+	const { bulan, tahun } = params;
+
+	// Build date range filter (based on createdAt)
+	let dateFilter: { gte?: Date; lte?: Date } = {};
+	if (tahun) {
+		const y = tahun;
+		const m = bulan ?? 0;
+		if (m) {
+			dateFilter = {
+				gte: new Date(y, m - 1, 1),
+				lte: new Date(y, m, 0, 23, 59, 59),
+			};
+		} else {
+			dateFilter = {
+				gte: new Date(y, 0, 1),
+				lte: new Date(y, 11, 31, 23, 59, 59),
+			};
+		}
+	}
+
+	const whereOrder = {
+		// Semua order kecuali yang dibatalkan
+		NOT: [{ statusOrder: "DIBATALKAN" as any }],
+		...(Object.keys(dateFilter).length > 0 && { createdAt: dateFilter }),
+	};
+
+	const orders = await prisma.order.findMany({
+		where: whereOrder,
+		orderBy: { createdAt: "desc" },
+		include: {
+			mobil: { select: { nama: true, merek: true, model: true, tahun: true, harga: true } },
+			buyer: { select: { name: true, email: true } },
+			pembayarans: {
+				where: { sudahDiverifikasi: true },
+				orderBy: { createdAt: "asc" },
+			},
+		},
+	});
+
+	// Summary
+	const totalPendapatan = orders.reduce((sum, o) => {
+		return sum + o.pembayarans.reduce((s, p) => s + Number(p.nominal), 0);
+	}, 0);
+
+	const totalMobilTerjual = orders.length;
+	const totalSelesai = orders.filter(o => o.statusOrder === "SELESAI").length;
+
+	return {
+		data: {
+			summary: { totalMobilTerjual, totalSelesai, totalPendapatan },
+			orders: orders.map((o) => ({
+				id: o.id,
+				tanggalPesan: o.createdAt,
+				statusOrder: o.statusOrder,
+				mobil: o.mobil,
+				buyer: o.buyer,
+				metodePengambilan: o.metodePengambilan,
+				totalDibayar: o.pembayarans.reduce((s, p) => s + Number(p.nominal), 0),
+				hargaMobil: Number(o.mobil?.harga ?? 0),
+			})),
+		},
+	};
+}
+

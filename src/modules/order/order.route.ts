@@ -12,6 +12,7 @@ import {
 	createOrderService,
 	getAllOrdersService,
 	getDashboardStatsService,
+	getLaporanService,
 	getMyOrderByIdService,
 	getMyOrdersService,
 	getOrderByIdService,
@@ -29,6 +30,16 @@ export const orderRouter = new Hono()
 	// GET /order/stats — statistik dashboard (admin)
 	.get("/stats", requireAuth, requireRole(["ADMIN"]), async (c) => {
 		const result = await getDashboardStatsService();
+		return c.json(result, 200);
+	})
+
+	// GET /order/laporan — laporan penjualan (admin)
+	.get("/laporan", requireAuth, requireRole(["ADMIN"]), async (c) => {
+		const { bulan, tahun } = c.req.query();
+		const result = await getLaporanService({
+			bulan: bulan ? Number(bulan) : undefined,
+			tahun: tahun ? Number(tahun) : undefined,
+		});
 		return c.json(result, 200);
 	})
 
