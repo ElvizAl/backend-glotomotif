@@ -5,6 +5,7 @@ import { logger } from "hono/logger";
 import { authRouter } from "./modules/auth/auth.route";
 import { bannerRouter } from "./modules/banner/banner.route";
 import { mobilRouter } from "./modules/mobil/mobil.route";
+import { orderRouter } from "./modules/order/order.route";
 import { penjualanRouter } from "./modules/penjualan/penjualan.route";
 import { profileRouter } from "./modules/profile/profile.route";
 import { userRouter } from "./modules/users/user.route";
@@ -32,6 +33,7 @@ const app = new Hono()
 	.route("/profile", profileRouter)
 	.route("/banner", bannerRouter)
 	.route("/mobil", mobilRouter)
+	.route("/order", orderRouter)
 	.route("/penjualan", penjualanRouter)
 
 	.notFound((c) => {
