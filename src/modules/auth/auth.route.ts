@@ -33,6 +33,13 @@ export const authRouter = new Hono()
 		return c.json(result, 201);
 	})
 
+	.post("/register/seller", zValidator("json", registerSchema), async (c) => {
+		const data = c.req.valid("json");
+		const result = await registerService(data, "SELLER");
+		return c.json(result, 201);
+	})
+
+
 	.post("/login", zValidator("json", loginSchema), async (c) => {
 		const data = c.req.valid("json");
 		const result = await loginService(data);

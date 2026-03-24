@@ -24,13 +24,28 @@ enum VerificationPurpose {
 }
 
 enum StatusMobil {
-  TERSEDIA
-  TERJUAL
+  // Alur Penjualan (Seller → Perusahaan)
+  DRAFT              // seller baru input, belum submit
+  MENUNGGU_EVALUASI  // seller submit, nunggu admin cek
+  SEDANG_DIEVALUASI  // admin lagi ngecek kondisi mobil
+  DITAWARKAN         // admin sudah beri harga tawar ke seller
+  DISETUJUI          // seller setuju harga, nunggu pembayaran ke seller
+  DITOLAK            // admin/seller tolak
+
+  // Alur Pembelian (Perusahaan → Customer)
+  TERSEDIA           // sudah jadi stok, tampil di listing
+  TERJUAL            // sudah dibeli customer
 }
 
 enum Transmisi {
   MANUAL
   OTOMATIS
+}
+
+enum ResponPenawaran {
+  MENUNGGU
+  DISETUJUI
+  DITOLAK
 }
 
 model User {
@@ -46,6 +61,8 @@ model User {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   profile          Profile?
+  orders           Order[]
+  mobils           mobil[]
 }
 
 model VerificationCode {
@@ -73,7 +90,7 @@ model Profile {
 }
 
 model mobil {
-  id          String      @id @default(cuid())
+  id          String          @id @default(cuid())
   nama        String
   merek       String?
   model       String?
@@ -82,11 +99,17 @@ model mobil {
   kilometer   String?
   bahan_bakar String?
   transmisi   Transmisi?
-  harga       Decimal     @db.Decimal(15, 2)
-  status      StatusMobil @default(TERSEDIA)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @default(now()) @updatedAt
+  harga       Decimal         @db.Decimal(15, 2)
+  deskripsi   String?
+  status      StatusMobil     @default(TERSEDIA)
+  // Seller yang mengajukan mobil ini (null = input langsung Admin)
+  sellerId    String?
+  seller      User?           @relation(fields: [sellerId], references: [id])
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @default(now()) @updatedAt
   fotomobils  Fotomobil[]
+  order       Order?
+  penawaran   PenawaranHarga?
 }
 
 model Fotomobil {
@@ -99,6 +122,21 @@ model Fotomobil {
   updatedAt DateTime @default(now()) @updatedAt
 }
 
+model PenawaranHarga {
+  id               String          @id @default(cuid())
+  mobilId          String          @unique
+  mobil            mobil           @relation(fields: [mobilId], references: [id])
+  hargaTawar       Decimal         @db.Decimal(15, 2)
+  catatanAdmin     String?
+  respon           ResponPenawaran @default(MENUNGGU)
+  catatanSeller    String?
+  metode           MetodeBayar?
+  buktiTransferUrl String?
+  kwitansiUrl      String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
 model Banner {
   id        String   @id @default(cuid())
   judul     String
@@ -107,4 +145,76 @@ model Banner {
   urutan    Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum StatusOrder {
+  MENUNGGU_BUKTI_PESANAN
+  MENUNGGU_DP
+  DIBATALKAN
+  MENUNGGU_PELUNASAN
+  LUNAS_SIAP_SERAH
+  SELESAI
+}
+
+enum StatusSurat {
+  BELUM_DIPROSES
+  SEDANG_DIPROSES
+  SELESAI
+}
+
+enum MetodePengambilan {
+  AMBIL_SENDIRI
+  DIANTAR
+}
+
+enum MetodeBayar {
+  TUNAI
+  TRANSFER
+}
+
+enum TipePembayaran {
+  BUKTI_PESANAN
+  DP
+  PELUNASAN
+}
+
+model Order {
+  id                String             @id @default(cuid())
+  buyerId           String
+  mobilId           String             @unique
+  buktiPesanan      Decimal            @default(500000) @db.Decimal(15, 2)
+  persenDp          Int                @default(30)
+  nominalDp         Decimal?           @db.Decimal(15, 2)
+  sisaPelunasan     Decimal?           @db.Decimal(15, 2)
+  tanggalPesan      DateTime           @default(now())
+  batasWaktuDp      DateTime
+  ktpUrl            String?
+  statusOrder       StatusOrder        @default(MENUNGGU_BUKTI_PESANAN)
+  statusStnk        StatusSurat        @default(BELUM_DIPROSES)
+  statusBpkb        StatusSurat        @default(BELUM_DIPROSES)
+  metodePengambilan MetodePengambilan?
+  alamatKirim       String?
+  suratJalanUrl     String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  buyer             User               @relation(fields: [buyerId], references: [id])
+  mobil             mobil              @relation(fields: [mobilId], references: [id])
+  pembayarans       Pembayaran[]
+}
+
+model Pembayaran {
+  id                String         @id @default(cuid())
+  orderId           String
+  tipe              TipePembayaran
+  metode            MetodeBayar
+  nominal           Decimal?       @db.Decimal(15, 2)
+  buktiTransferUrl  String?
+  sudahDiverifikasi Boolean        @default(false)
+  verifiedAt        DateTime?
+  kwitansiUrl       String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  order             Order          @relation(fields: [orderId], references: [id])
 }

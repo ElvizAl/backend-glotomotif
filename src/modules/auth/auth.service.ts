@@ -1,5 +1,5 @@
 import { HTTPException } from "hono/http-exception";
-import { VerificationPurpose } from "../../generated/prisma/enums";
+import { type Role, VerificationPurpose } from "../../generated/prisma/enums";
 import { sendOtpEmail, upsertVerificationCode } from "../../lib/email";
 import { hashPassword, verifyPassword } from "../../utils/hash";
 import { signAccessToken } from "../../utils/jwt";
@@ -13,7 +13,7 @@ import type {
 	VerifyEmailOtpInput,
 } from "./auth.schema";
 
-export async function registerService(data: RegisterInput) {
+export async function registerService(data: RegisterInput, role: Role = "BUYER") {
 	const existingUser = await prisma.user.findUnique({
 		where: { email: data.email },
 	});
@@ -29,6 +29,7 @@ export async function registerService(data: RegisterInput) {
 			name: data.name,
 			email: data.email,
 			password: passwordHash,
+			role,
 		},
 	});
 
@@ -49,6 +50,7 @@ export async function registerService(data: RegisterInput) {
 			id: user.id,
 			name: user.name,
 			email: user.email,
+			role: user.role,
 		},
 	};
 }
