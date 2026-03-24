@@ -167,7 +167,7 @@ export const orderRouter = new Hono()
 		const parsed = uploadPembayaranSchema.safeParse({
 			tipe: formData.get("tipe"),
 			metode: formData.get("metode"),
-			nominal: formData.get("nominal"),
+			nominal: formData.get("nominal") || undefined,
 			buktiTransferUrl: formData.get("buktiTransferUrl") || undefined,
 		});
 		if (!parsed.success)
