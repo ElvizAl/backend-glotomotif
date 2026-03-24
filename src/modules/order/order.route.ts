@@ -24,13 +24,84 @@ import {
 
 export const orderRouter = new Hono()
 
-	// ─── ADMIN ─────────────────────────────────────────────
+	// ─── STATIC ROUTES FIRST (before /:id wildcards) ──────
 
-	// GET /order/stats — statistik dashboard
+	// GET /order/stats — statistik dashboard (admin)
 	.get("/stats", requireAuth, requireRole(["ADMIN"]), async (c) => {
 		const result = await getDashboardStatsService();
 		return c.json(result, 200);
 	})
+
+	// GET /order/my — order milik buyer yang login
+	.get("/my", requireAuth, requireRole(["BUYER"]), async (c) => {
+		const buyerId = c.get("user").sub;
+		const parsed = orderQuerySchema.safeParse(c.req.query());
+		if (!parsed.success)
+			return c.json({ message: parsed.error.issues[0].message }, 400);
+		const result = await getMyOrdersService(buyerId, parsed.data);
+		return c.json(result, 200);
+	})
+
+	// GET /order/my/:id — detail order buyer
+	.get("/my/:id", requireAuth, requireRole(["BUYER"]), async (c) => {
+		const buyerId = c.get("user").sub;
+		const id = c.req.param("id");
+		const result = await getMyOrderByIdService(id, buyerId);
+		return c.json(result, 200);
+	})
+
+	// POST /order/my/:id/ktp — upload KTP (buyer)
+	.post("/my/:id/ktp", requireAuth, requireRole(["BUYER"]), async (c) => {
+		const buyerId = c.get("user").sub;
+		const id = c.req.param("id");
+		const formData = await c.req.formData();
+		const ktpFile = formData.get("ktp") as File | null;
+
+		if (!ktpFile || ktpFile.size === 0)
+			return c.json({ message: "File KTP wajib diupload" }, 400);
+
+		const ktpBuffer = Buffer.from(await ktpFile.arrayBuffer());
+		const result = await uploadKtpService(id, buyerId, ktpBuffer);
+		return c.json(result, 200);
+	})
+
+	// POST /order/my/:id/bayar — upload bukti pembayaran (buyer)
+	.post("/my/:id/bayar", requireAuth, requireRole(["BUYER"]), async (c) => {
+		const buyerId = c.get("user").sub;
+		const id = c.req.param("id");
+		const formData = await c.req.formData();
+
+		const parsed = uploadPembayaranSchema.safeParse({
+			tipe: formData.get("tipe"),
+			metode: formData.get("metode"),
+			nominal: formData.get("nominal") || undefined,
+			buktiTransferUrl: formData.get("buktiTransferUrl") || undefined,
+		});
+		if (!parsed.success)
+			return c.json({ message: parsed.error.issues[0].message }, 400);
+
+		const buktiFile = formData.get("bukti") as File | null;
+		const buktiBuffer =
+			buktiFile && buktiFile.size > 0
+				? Buffer.from(await buktiFile.arrayBuffer())
+				: undefined;
+
+		const result = await uploadPembayaranService(id, buyerId, parsed.data, buktiBuffer);
+		return c.json(result, 201);
+	})
+
+	// POST /order — buat order baru (buyer)
+	.post("/", requireAuth, requireRole(["BUYER"]), async (c) => {
+		const buyerId = c.get("user").sub;
+		const body = await c.req.json();
+		const parsed = createOrderSchema.safeParse(body);
+		if (!parsed.success)
+			return c.json({ message: parsed.error.issues[0].message }, 400);
+		const result = await createOrderService(buyerId, parsed.data);
+		return c.json(result, 201);
+	})
+
+	// ─── ADMIN WILDCARD ROUTES (after static routes) ──────
 
 	// GET /order — semua order (admin)
 	.get("/", requireAuth, requireRole(["ADMIN"]), async (c) => {
@@ -40,6 +111,37 @@ export const orderRouter = new Hono()
 		const result = await getAllOrdersService(parsed.data);
 		return c.json(result, 200);
 	})
+
+	// PATCH /order/pembayaran/:pembayaranId/verifikasi — verifikasi + upload kwitansi (admin)
+	.patch(
+		"/pembayaran/:pembayaranId/verifikasi",
+		requireAuth,
+		requireRole(["ADMIN"]),
+		async (c) => {
+			const pembayaranId = c.req.param("pembayaranId");
+			const formData = await c.req.formData();
+
+			const parsed = verifikasiPembayaranSchema.safeParse({
+				sudahDiverifikasi: formData.get("sudahDiverifikasi") === "true",
+				kwitansiUrl: formData.get("kwitansiUrl") || undefined,
+			});
+			if (!parsed.success)
+				return c.json({ message: parsed.error.issues[0].message }, 400);
+
+			const kwitansiFile = formData.get("kwitansi") as File | null;
+			const kwitansiBuffer =
+				kwitansiFile && kwitansiFile.size > 0
+					? Buffer.from(await kwitansiFile.arrayBuffer())
+					: undefined;
+
+			const result = await verifikasiPembayaranService(
+				pembayaranId,
+				parsed.data,
+				kwitansiBuffer,
+			);
+			return c.json(result, 200);
+		},
+	)
 
 	// GET /order/:id — detail order (admin)
 	.get("/:id", requireAuth, requireRole(["ADMIN"]), async (c) => {
@@ -79,106 +181,4 @@ export const orderRouter = new Hono()
 
 		const result = await updatePengambilanService(id, parsed.data, suratBuffer);
 		return c.json(result, 200);
-	})
-
-	// PATCH /order/pembayaran/:pembayaranId/verifikasi — verifikasi + upload kwitansi (admin)
-	.patch(
-		"/pembayaran/:pembayaranId/verifikasi",
-		requireAuth,
-		requireRole(["ADMIN"]),
-		async (c) => {
-			const pembayaranId = c.req.param("pembayaranId");
-			const formData = await c.req.formData();
-
-			const parsed = verifikasiPembayaranSchema.safeParse({
-				sudahDiverifikasi: formData.get("sudahDiverifikasi") === "true",
-				kwitansiUrl: formData.get("kwitansiUrl") || undefined,
-			});
-			if (!parsed.success)
-				return c.json({ message: parsed.error.issues[0].message }, 400);
-
-			const kwitansiFile = formData.get("kwitansi") as File | null;
-			const kwitansiBuffer =
-				kwitansiFile && kwitansiFile.size > 0
-					? Buffer.from(await kwitansiFile.arrayBuffer())
-					: undefined;
-
-			const result = await verifikasiPembayaranService(
-				pembayaranId,
-				parsed.data,
-				kwitansiBuffer,
-			);
-			return c.json(result, 200);
-		},
-	)
-
-	// ─── BUYER ─────────────────────────────────────────────
-
-	// GET /order/my — order milik buyer yang login
-	.get("/my", requireAuth, requireRole(["BUYER"]), async (c) => {
-		const buyerId = c.get("user").sub;
-		const parsed = orderQuerySchema.safeParse(c.req.query());
-		if (!parsed.success)
-			return c.json({ message: parsed.error.issues[0].message }, 400);
-		const result = await getMyOrdersService(buyerId, parsed.data);
-		return c.json(result, 200);
-	})
-
-	// GET /order/my/:id — detail order buyer
-	.get("/my/:id", requireAuth, requireRole(["BUYER"]), async (c) => {
-		const buyerId = c.get("user").sub;
-		const id = c.req.param("id");
-		const result = await getMyOrderByIdService(id, buyerId);
-		return c.json(result, 200);
-	})
-
-	// POST /order — buat order baru (buyer)
-	.post("/", requireAuth, requireRole(["BUYER"]), async (c) => {
-		const buyerId = c.get("user").sub;
-		const body = await c.req.json();
-		const parsed = createOrderSchema.safeParse(body);
-		if (!parsed.success)
-			return c.json({ message: parsed.error.issues[0].message }, 400);
-		const result = await createOrderService(buyerId, parsed.data);
-		return c.json(result, 201);
-	})
-
-	// POST /order/:id/ktp — upload KTP (buyer)
-	.post("/:id/ktp", requireAuth, requireRole(["BUYER"]), async (c) => {
-		const buyerId = c.get("user").sub;
-		const id = c.req.param("id");
-		const formData = await c.req.formData();
-		const ktpFile = formData.get("ktp") as File | null;
-
-		if (!ktpFile || ktpFile.size === 0)
-			return c.json({ message: "File KTP wajib diupload" }, 400);
-
-		const ktpBuffer = Buffer.from(await ktpFile.arrayBuffer());
-		const result = await uploadKtpService(id, buyerId, ktpBuffer);
-		return c.json(result, 200);
-	})
-
-	// POST /order/:id/bayar — upload bukti pembayaran (buyer)
-	.post("/:id/bayar", requireAuth, requireRole(["BUYER"]), async (c) => {
-		const buyerId = c.get("user").sub;
-		const id = c.req.param("id");
-		const formData = await c.req.formData();
-
-		const parsed = uploadPembayaranSchema.safeParse({
-			tipe: formData.get("tipe"),
-			metode: formData.get("metode"),
-			nominal: formData.get("nominal") || undefined,
-			buktiTransferUrl: formData.get("buktiTransferUrl") || undefined,
-		});
-		if (!parsed.success)
-			return c.json({ message: parsed.error.issues[0].message }, 400);
-
-		const buktiFile = formData.get("bukti") as File | null;
-		const buktiBuffer =
-			buktiFile && buktiFile.size > 0
-				? Buffer.from(await buktiFile.arrayBuffer())
-				: undefined;
-
-		const result = await uploadPembayaranService(id, buyerId, parsed.data, buktiBuffer);
-		return c.json(result, 201);
 	});
