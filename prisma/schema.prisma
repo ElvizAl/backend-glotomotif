@@ -125,7 +125,7 @@ model Fotomobil {
 model PenawaranHarga {
   id               String          @id @default(cuid())
   mobilId          String          @unique
-  mobil            mobil           @relation(fields: [mobilId], references: [id])
+  mobil            mobil           @relation(fields: [mobilId], references: [id], onDelete: Cascade)
   hargaTawar       Decimal         @db.Decimal(15, 2)
   catatanAdmin     String?
   respon           ResponPenawaran @default(MENUNGGU)

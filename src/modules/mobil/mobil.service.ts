@@ -150,11 +150,31 @@ export async function updateMobilService(id: string, data: UpdateMobilInput) {
 export async function deleteMobilService(id: string) {
 	const existing = await prisma.mobil.findUnique({
 		where: { id },
-		include: { fotomobils: true },
+		include: {
+			fotomobils: true,
+			order: { include: { pembayarans: true } },
+		},
 	});
 
 	if (!existing) {
 		throw new HTTPException(404, { message: "Mobil tidak ditemukan" });
+	}
+
+	// Cek apakah ada order yang masih aktif
+	const FINAL_STATUSES = ["DIBATALKAN", "SELESAI"];
+	if (existing.order && !FINAL_STATUSES.includes(existing.order.statusOrder)) {
+		throw new HTTPException(400, {
+			message:
+				"Mobil tidak dapat dihapus karena masih memiliki order yang aktif.",
+		});
+	}
+
+	// Kalau ada order yang sudah selesai/dibatalkan, hapus dulu beserta pembayarannya
+	if (existing.order) {
+		await prisma.pembayaran.deleteMany({
+			where: { orderId: existing.order.id },
+		});
+		await prisma.order.delete({ where: { id: existing.order.id } });
 	}
 
 	// Hapus semua foto dari Cloudinary
@@ -165,6 +185,7 @@ export async function deleteMobilService(id: string) {
 		}),
 	);
 
+	// Hapus mobil (PenawaranHarga otomatis terhapus via onDelete: Cascade)
 	await prisma.mobil.delete({ where: { id } });
 
 	return { message: "Mobil berhasil dihapus" };
