@@ -138,6 +138,13 @@ export async function updateMobilService(id: string, data: UpdateMobilInput) {
 		throw new HTTPException(404, { message: "Mobil tidak ditemukan" });
 	}
 
+	// Tidak boleh ubah status dari TERJUAL ke TERSEDIA
+	if (existing.status === "TERJUAL" && data.status === "TERSEDIA") {
+		throw new HTTPException(400, {
+			message: "Mobil yang sudah terjual tidak dapat diubah menjadi tersedia",
+		});
+	}
+
 	const mobil = await prisma.mobil.update({
 		where: { id },
 		data,
