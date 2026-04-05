@@ -45,17 +45,22 @@ export const mobilRouter = new Hono()
 	.post("/", requireAuth, requireRole(["ADMIN"]), async (c) => {
 		const formData = await c.req.formData();
 
+		const getStr = (k: string) => {
+			const v = formData.get(k);
+			return (v === null || v.toString().trim() === "") ? undefined : v.toString();
+		};
+
 		const parsed = createMobilSchema.safeParse({
-			nama: formData.get("nama"),
-			merek: formData.get("merek"),
-			model: formData.get("model"),
-			tahun: formData.get("tahun"),
-			warna: formData.get("warna"),
-			kilometer: formData.get("kilometer"),
-			bahan_bakar: formData.get("bahan_bakar"),
-			transmisi: formData.get("transmisi"),
-			harga: formData.get("harga"),
-			status: formData.get("status"),
+			nama: getStr("nama"),
+			merek: getStr("merek"),
+			model: getStr("model"),
+			tahun: getStr("tahun"),
+			warna: getStr("warna"),
+			kilometer: getStr("kilometer"),
+			bahan_bakar: getStr("bahan_bakar"),
+			transmisi: getStr("transmisi"),
+			harga: getStr("harga"),
+			status: getStr("status"),
 		});
 
 		if (!parsed.success) {
