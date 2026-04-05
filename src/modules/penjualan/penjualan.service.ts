@@ -110,7 +110,7 @@ export async function getMyMobilSellerService(
 
 	const where = {
 		sellerId,
-		...(status ? { status } : { status: { in: mobilSellerStatuses } }),
+		...(status ? { status } : {}),
 	};
 
 	const [data, total] = await Promise.all([
@@ -349,7 +349,7 @@ export async function getAllPenjualanService(query: PenjualanQueryInput) {
 
 	const where = {
 		sellerId: { not: null },
-		...(status ? { status } : { status: { in: mobilSellerStatuses } }),
+		...(status ? { status } : {}),
 	};
 
 	const [data, total] = await Promise.all([
