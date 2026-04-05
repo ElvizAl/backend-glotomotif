@@ -74,12 +74,30 @@ export async function updateUserService(id: string, data: UpdateUserInput) {
 }
 
 export async function deleteUserService(id: string) {
-	const user = await prisma.user.findUnique({ where: { id } });
+	const user = await prisma.user.findUnique({ 
+		where: { id },
+		include: {
+			orders: { take: 1 },
+			mobils: { take: 1 },
+		}
+	});
 
 	if (!user) {
 		throw new HTTPException(404, { message: "User tidak ditemukan" });
 	}
 
+	if (user.orders.length > 0) {
+		throw new HTTPException(400, { message: "Gagal menghapus: Pengguna ini masih memiliki riwayat pesanan." });
+	}
+
+	if (user.mobils.length > 0) {
+		throw new HTTPException(400, { message: "Gagal menghapus: Pengguna ini masih memiliki data mobil terkait." });
+	}
+
+	// Hapus verification code terlebih dahulu (karena belum cascade)
+	await prisma.verificationCode.deleteMany({ where: { userId: id } });
+
+	// Hapus user (Profile otomatis terhapus karena ada onDelete: Cascade)
 	await prisma.user.delete({ where: { id } });
 
 	return { message: "User berhasil dihapus" };
