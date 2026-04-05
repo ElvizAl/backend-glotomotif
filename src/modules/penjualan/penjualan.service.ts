@@ -440,6 +440,8 @@ export async function createPenawaranService(
 export async function konfirmasiPembayaranService(
 	mobilId: string,
 	data: KonfirmasiPembayaranInput,
+	buktiTransferBuf?: Buffer,
+	kwitansiBuf?: Buffer,
 ) {
 	const mobil = await prisma.mobil.findUnique({
 		where: { id: mobilId },
@@ -451,13 +453,23 @@ export async function konfirmasiPembayaranService(
 	if (mobil.status !== "DISETUJUI" || !mobil.penawaran)
 		throw new HTTPException(400, { message: "Mobil belum disetujui seller" });
 
+	let finalBuktiTransferUrl = data.buktiTransferUrl;
+	if (buktiTransferBuf) {
+		finalBuktiTransferUrl = await uploadImageToCloudinary(buktiTransferBuf, "pembayaran");
+	}
+
+	let finalKwitansiUrl = data.kwitansiUrl;
+	if (kwitansiBuf) {
+		finalKwitansiUrl = await uploadImageToCloudinary(kwitansiBuf, "pembayaran");
+	}
+
 	await prisma.$transaction([
 		prisma.penawaranHarga.update({
 			where: { id: mobil.penawaran.id },
 			data: {
 				metode: data.metode,
-				buktiTransferUrl: data.buktiTransferUrl,
-				kwitansiUrl: data.kwitansiUrl,
+				buktiTransferUrl: finalBuktiTransferUrl,
+				kwitansiUrl: finalKwitansiUrl,
 			},
 		}),
 		// Setelah bayar seller → mobil jadi TERSEDIA di listing customer

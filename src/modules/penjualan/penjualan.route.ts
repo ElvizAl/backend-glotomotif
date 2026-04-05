@@ -209,12 +209,37 @@ export const penjualanRouter = new Hono()
 
 	// PATCH /penjualan/:id/bayar — admin: konfirmasi bayar seller → mobil jadi TERSEDIA
 	.patch("/:id/bayar", requireAuth, requireRole(["ADMIN"]), async (c) => {
-		const parsed = konfirmasiPembayaranSchema.safeParse(await c.req.json());
+		const contentType = c.req.header("content-type") || "";
+		let dataPayload: any = {};
+		let buktiBuf: Buffer | undefined;
+		let kwitansiBuf: Buffer | undefined;
+
+		if (contentType.includes("multipart/form-data")) {
+			const formData = await c.req.formData();
+			dataPayload.metode = formData.get("metode");
+			
+			const buktiTransfer = formData.get("buktiTransfer");
+			if (buktiTransfer instanceof File && buktiTransfer.size > 0) {
+				buktiBuf = Buffer.from(await buktiTransfer.arrayBuffer());
+			}
+
+			const kwitansi = formData.get("kwitansi");
+			if (kwitansi instanceof File && kwitansi.size > 0) {
+				kwitansiBuf = Buffer.from(await kwitansi.arrayBuffer());
+			}
+		} else {
+			dataPayload = await c.req.json();
+		}
+
+		const parsed = konfirmasiPembayaranSchema.safeParse(dataPayload);
 		if (!parsed.success)
 			return c.json({ message: parsed.error.issues[0].message }, 400);
+
 		const result = await konfirmasiPembayaranService(
 			c.req.param("id"),
 			parsed.data,
+			buktiBuf,
+			kwitansiBuf,
 		);
 		return c.json(result, 200);
 	});
