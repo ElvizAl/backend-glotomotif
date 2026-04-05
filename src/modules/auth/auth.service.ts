@@ -141,9 +141,13 @@ export async function loginService(data: LoginInput) {
     throw new HTTPException(403, { message: "User dibanned" });
   }
 
+  if (!existingUser.password) {
+    throw new HTTPException(400, { message: "Akun ini didaftarkan menggunakan Google, silakan login dengan Google." });
+  }
+
   const isPasswordValid = await verifyPassword(
     data.password,
-    existingUser.password as string,
+    existingUser.password,
   );
 
   if (!isPasswordValid) {
