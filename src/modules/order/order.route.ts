@@ -21,6 +21,7 @@ import {
 	uploadKtpService,
 	uploadPembayaranService,
 	verifikasiPembayaranService,
+	processRefundService,
 } from "./order.service";
 
 export const orderRouter = new Hono()
@@ -150,6 +151,26 @@ export const orderRouter = new Hono()
 				parsed.data,
 				kwitansiBuffer,
 			);
+			return c.json(result, 200);
+		},
+	)
+
+	// PATCH /order/pembayaran/:pembayaranId/refund — proses refund uang muka (admin)
+	.patch(
+		"/pembayaran/:pembayaranId/refund",
+		requireAuth,
+		requireRole(["ADMIN"]),
+		async (c) => {
+			const pembayaranId = c.req.param("pembayaranId");
+			const formData = await c.req.formData();
+			
+			const buktiFile = formData.get("bukti") as File | null;
+			const buktiBuffer =
+				buktiFile && buktiFile.size > 0
+					? Buffer.from(await buktiFile.arrayBuffer())
+					: undefined;
+
+			const result = await processRefundService(pembayaranId, buktiBuffer);
 			return c.json(result, 200);
 		},
 	)

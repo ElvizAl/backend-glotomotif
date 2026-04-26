@@ -8,6 +8,7 @@ import { mobilRouter } from "./modules/mobil/mobil.route";
 import { orderRouter } from "./modules/order/order.route";
 import { penjualanRouter } from "./modules/penjualan/penjualan.route";
 import { profileRouter } from "./modules/profile/profile.route";
+import { cronRouter } from "./modules/order/cron.route";
 import { userRouter } from "./modules/users/user.route";
 
 import "dotenv";
@@ -35,6 +36,7 @@ const app = new Hono()
 	.route("/mobil", mobilRouter)
 	.route("/order", orderRouter)
 	.route("/penjualan", penjualanRouter)
+	.route("/cron", cronRouter)
 
 	.notFound((c) => {
 		return c.json({ message: "Tidak Ditemukan" }, 404);

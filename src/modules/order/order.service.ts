@@ -455,3 +455,94 @@ export async function getLaporanService(params: {
     },
   };
 }
+
+export async function checkAndCancelExpiredOrders() {
+  const now = new Date();
+
+  // Cari pesanan yang statusnya masih 'MENUNGGU_DP' dan batas waktunya sudah lewat
+  const expiredOrders = await prisma.order.findMany({
+    where: {
+      statusOrder: "MENUNGGU_DP",
+      batasWaktuDp: {
+        lt: now,
+      },
+    },
+  });
+
+  if (expiredOrders.length === 0) {
+    return { message: "Tidak ada pesanan kedaluwarsa." };
+  }
+
+  const cancelledOrderIds = expiredOrders.map((o) => o.id);
+  const cancelledMobilIds = expiredOrders.map((o) => o.mobilId);
+
+  await prisma.$transaction(async (tx) => {
+    // 1. Batalkan semua pesanan yang kedaluwarsa
+    await tx.order.updateMany({
+      where: { id: { in: cancelledOrderIds } },
+      data: { statusOrder: "DIBATALKAN" },
+    });
+
+    // 2. Kembalikan status mobil menjadi TERSEDIA
+    await tx.mobil.updateMany({
+      where: { id: { in: cancelledMobilIds } },
+      data: { status: "TERSEDIA" },
+    });
+  });
+
+  return {
+    message: `Berhasil membatalkan ${expiredOrders.length} pesanan yang kedaluwarsa.`,
+    data: {
+      cancelledOrdersCount: expiredOrders.length,
+      cancelledOrderIds,
+    },
+  };
+}
+
+export async function processRefundService(
+  pembayaranId: string,
+  buktiRefundBuffer?: Buffer
+) {
+  const pembayaran = await prisma.pembayaran.findUnique({
+    where: { id: pembayaranId },
+    include: { order: true },
+  });
+
+  if (!pembayaran) {
+    throw new HTTPException(404, { message: "Pembayaran tidak ditemukan" });
+  }
+
+  if (pembayaran.tipe !== "BUKTI_PESANAN") {
+    throw new HTTPException(400, {
+      message: "Refund hanya bisa dilakukan untuk tipe BUKTI_PESANAN",
+    });
+  }
+
+  if (pembayaran.order.statusOrder !== "DIBATALKAN") {
+    throw new HTTPException(400, {
+      message: "Pesanan belum DIBATALKAN, tidak bisa proses refund",
+    });
+  }
+
+  let buktiRefundUrl = undefined;
+  if (buktiRefundBuffer && buktiRefundBuffer.length > 0) {
+    buktiRefundUrl = await uploadImageToCloudinary(
+      buktiRefundBuffer,
+      "bukti-refund"
+    );
+  }
+
+  const updatedPembayaran = await prisma.pembayaran.update({
+    where: { id: pembayaranId },
+    data: {
+      isRefunded: true,
+      refundedAt: new Date(),
+      ...(buktiRefundUrl && { buktiRefundUrl }),
+    },
+  });
+
+  return {
+    message: "Refund berhasil diproses",
+    data: updatedPembayaran,
+  };
+}
