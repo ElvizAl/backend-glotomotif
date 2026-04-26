@@ -9,7 +9,7 @@
 	"crons": [
 		{
 			"path": "/api/cron/check-expired",
-			"schedule": "0 * * * *"
+			"schedule": "0 10 * * *"
 		}
 	]
 }
