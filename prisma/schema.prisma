@@ -147,6 +147,16 @@ model Banner {
   updatedAt DateTime @updatedAt
 }
 
+model RekeningAdmin {
+  id        String   @id @default(cuid())
+  bank      String   // e.g. "BCA", "BNI", "Mandiri"
+  noRekening String  // nomor rekening
+  atasNama  String   // nama pemilik rekening
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 enum StatusOrder {
   MENUNGGU_BUKTI_PESANAN
   MENUNGGU_DP
@@ -195,6 +205,9 @@ model Order {
   metodePengambilan MetodePengambilan?
   alamatKirim       String?
   suratJalanUrl     String?
+  noRekeningRefund  String?
+  namaRekeningRefund String?
+  bankRefund        String?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 

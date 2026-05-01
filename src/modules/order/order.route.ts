@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { requireAuth, requireRole } from "../../middleware/auth";
+import { prisma } from "../../utils/prisma";
 import {
 	createOrderSchema,
 	orderQuerySchema,
@@ -9,6 +10,7 @@ import {
 	verifikasiPembayaranSchema,
 } from "./order.schema";
 import {
+	cancelOrderService,
 	createOrderService,
 	getAllOrdersService,
 	getDashboardStatsService,
@@ -42,6 +44,32 @@ export const orderRouter = new Hono()
 			tahun: tahun ? Number(tahun) : undefined,
 		});
 		return c.json(result, 200);
+	})
+
+	// GET /order/rekening — list rekening admin aktif (publik/buyer)
+	.get("/rekening", requireAuth, async (c) => {
+		const rekening = await prisma.rekeningAdmin.findMany({
+			where: { isActive: true },
+			orderBy: { createdAt: "asc" },
+		});
+		return c.json({ data: rekening }, 200);
+	})
+
+	// POST /order/rekening — tambah rekening admin (admin)
+	.post("/rekening", requireAuth, requireRole(["ADMIN"]), async (c) => {
+		const body = await c.req.json();
+		const { bank, noRekening, atasNama } = body;
+		if (!bank || !noRekening || !atasNama)
+			return c.json({ message: "bank, noRekening, atasNama wajib diisi" }, 400);
+		const rekening = await prisma.rekeningAdmin.create({ data: { bank, noRekening, atasNama } });
+		return c.json({ data: rekening }, 201);
+	})
+
+	// DELETE /order/rekening/:id — hapus rekening admin (admin)
+	.delete("/rekening/:id", requireAuth, requireRole(["ADMIN"]), async (c) => {
+		const id = c.req.param("id");
+		await prisma.rekeningAdmin.delete({ where: { id } });
+		return c.json({ message: "Rekening berhasil dihapus" }, 200);
 	})
 
 	// GET /order/my — order milik buyer yang login
@@ -100,6 +128,18 @@ export const orderRouter = new Hono()
 
 		const result = await uploadPembayaranService(id, buyerId, parsed.data, buktiBuffer);
 		return c.json(result, 201);
+	})
+
+	// PATCH /order/my/:id/cancel — batalkan pesanan (buyer)
+	.patch("/my/:id/cancel", requireAuth, requireRole(["BUYER"]), async (c) => {
+		const buyerId = c.get("user").sub;
+		const id = c.req.param("id");
+		const body = await c.req.json().catch(() => ({}));
+		const refundInfo = body.noRekening
+			? { noRekening: body.noRekening, namaRekening: body.namaRekening, bank: body.bank }
+			: undefined;
+		const result = await cancelOrderService(id, buyerId, refundInfo);
+		return c.json(result, 200);
 	})
 
 	// POST /order — buat order baru (buyer)

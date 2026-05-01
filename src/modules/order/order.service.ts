@@ -499,6 +499,73 @@ export async function checkAndCancelExpiredOrders() {
   };
 }
 
+export async function cancelOrderService(
+  id: string,
+  buyerId: string,
+  refundInfo?: { noRekening: string; namaRekening: string; bank: string },
+) {
+  const order = await prisma.order.findUnique({
+    where: { id },
+    include: { pembayarans: true },
+  });
+
+  if (!order)
+    throw new HTTPException(404, { message: "Pesanan tidak ditemukan" });
+  if (order.buyerId !== buyerId)
+    throw new HTTPException(403, { message: "Akses ditolak" });
+
+  const cancellableStatuses = [
+    "MENUNGGU_BUKTI_PESANAN",
+    "MENUNGGU_DP",
+    "MENUNGGU_PELUNASAN",
+  ] as const;
+
+  if (!cancellableStatuses.includes(order.statusOrder as any)) {
+    throw new HTTPException(400, {
+      message: "Pesanan tidak bisa dibatalkan pada status ini",
+    });
+  }
+
+  // Jika sudah ada pembayaran terverifikasi, wajib isi rekening refund
+  const hasVerifiedPayment = order.pembayarans.some(
+    (p: any) => p.sudahDiverifikasi,
+  );
+  if (hasVerifiedPayment && !refundInfo?.noRekening) {
+    throw new HTTPException(400, {
+      message:
+        "Nomor rekening wajib diisi karena sudah ada pembayaran yang terverifikasi",
+    });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // 1. Batalkan pesanan + simpan info rekening refund
+    await tx.order.update({
+      where: { id },
+      data: {
+        statusOrder: "DIBATALKAN",
+        ...(refundInfo && {
+          noRekeningRefund: refundInfo.noRekening,
+          namaRekeningRefund: refundInfo.namaRekening,
+          bankRefund: refundInfo.bank,
+        }),
+      },
+    });
+
+    // 2. Kembalikan status mobil menjadi TERSEDIA
+    await tx.mobil.update({
+      where: { id: order.mobilId },
+      data: { status: "TERSEDIA" },
+    });
+  });
+
+  const result = await prisma.order.findUnique({
+    where: { id },
+    include: includeOrder,
+  });
+
+  return { message: "Pesanan berhasil dibatalkan", data: result };
+}
+
 export async function processRefundService(
   pembayaranId: string,
   buktiRefundBuffer?: Buffer
