@@ -11,6 +11,10 @@ const envSchema = z.object({
 	GOOGLE_CLIENT_ID: z.string().default(""),
 	GOOGLE_CLIENT_SECRET: z.string().default(""),
 	FRONTEND_URL: z.string().url().default("https://www.glotomotif.my.id"),
+
+	CLOUDINARY_CLOUD_NAME: z.string().default(""),
+	CLOUDINARY_API_KEY: z.string().default(""),
+	CLOUDINARY_API_SECRET: z.string().default(""),
 });
 
 export const env = envSchema.parse(process.env);
