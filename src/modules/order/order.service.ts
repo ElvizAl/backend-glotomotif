@@ -284,11 +284,11 @@ export async function verifikasiPembayaranService(
       },
     });
 
-    // Jika pelunasan diverifikasi → status SELESAI
+    // Jika pelunasan diverifikasi → status LUNAS_SIAP_SERAH
     if (data.sudahDiverifikasi && pembayaran.tipe === "PELUNASAN") {
       await tx.order.update({
         where: { id: pembayaran.orderId },
-        data: { statusOrder: "SELESAI" },
+        data: { statusOrder: "LUNAS_SIAP_SERAH" },
       });
     }
 
@@ -626,4 +626,25 @@ export async function processRefundService(
     message: "Refund berhasil diproses",
     data: updatedPembayaran,
   };
+}
+
+export async function tandaiSelesaiService(orderId: string) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: includeOrder,
+  });
+
+  if (!order) throw new HTTPException(404, { message: "Pesanan tidak ditemukan" });
+  if (order.statusOrder !== "LUNAS_SIAP_SERAH")
+    throw new HTTPException(400, { message: "Pesanan belum pada tahap siap diserahkan" });
+  if (order.statusStnk !== "SELESAI")
+    throw new HTTPException(400, { message: "STNK belum selesai diproses. Serah terima ditunda." });
+
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: { statusOrder: "SELESAI" },
+    include: includeOrder,
+  });
+
+  return { message: "Pesanan berhasil ditandai Selesai (Serah Terima Berhasil)", data: updated };
 }

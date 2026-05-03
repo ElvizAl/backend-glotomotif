@@ -24,6 +24,7 @@ import {
 	uploadPembayaranService,
 	verifikasiPembayaranService,
 	processRefundService,
+	tandaiSelesaiService,
 } from "./order.service";
 
 export const orderRouter = new Hono()
@@ -252,5 +253,13 @@ export const orderRouter = new Hono()
 				: undefined;
 
 		const result = await updatePengambilanService(id, parsed.data, suratBuffer);
+		return c.json(result, 200);
+	})
+
+	// PATCH /order/:id/selesai — tandai serah terima berhasil (admin)
+	.patch("/:id/selesai", requireAuth, requireRole(["ADMIN"]), async (c) => {
+		const id = c.req.param("id");
+		// tandaiSelesaiService needs to be imported
+		const result = await tandaiSelesaiService(id);
 		return c.json(result, 200);
 	});
