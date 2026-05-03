@@ -306,12 +306,26 @@ export async function updateStatusSuratService(
   if (!order)
     throw new HTTPException(404, { message: "Pesanan tidak ditemukan" });
 
+  let updateData: any = {
+    ...(data.statusStnk && { statusStnk: data.statusStnk }),
+    ...(data.statusBpkb && { statusBpkb: data.statusBpkb }),
+  };
+
+  const now = new Date();
+  
+  if (data.statusStnk === "SEDANG_DIPROSES" && order.statusStnk !== "SEDANG_DIPROSES") {
+    const estimasiStnk = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+    updateData.estimasiStnkSelesai = estimasiStnk;
+  }
+  
+  if (data.statusBpkb === "SEDANG_DIPROSES" && order.statusBpkb !== "SEDANG_DIPROSES") {
+    const estimasiBpkb = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+    updateData.estimasiBpkbSelesai = estimasiBpkb;
+  }
+
   const updated = await prisma.order.update({
     where: { id: orderId },
-    data: {
-      ...(data.statusStnk && { statusStnk: data.statusStnk }),
-      ...(data.statusBpkb && { statusBpkb: data.statusBpkb }),
-    },
+    data: updateData,
     include: includeOrder,
   });
 

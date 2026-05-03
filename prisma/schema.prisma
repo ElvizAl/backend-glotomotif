@@ -207,7 +207,9 @@ model Order {
   ktpUrl            String?
   statusOrder       StatusOrder        @default(MENUNGGU_BUKTI_PESANAN)
   statusStnk        StatusSurat        @default(BELUM_DIPROSES)
+  estimasiStnkSelesai DateTime?
   statusBpkb        StatusSurat        @default(BELUM_DIPROSES)
+  estimasiBpkbSelesai DateTime?
   metodePengambilan MetodePengambilan?
   alamatKirim       String?
   suratJalanUrl     String?
