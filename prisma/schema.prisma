@@ -131,6 +131,12 @@ model PenawaranHarga {
   respon           ResponPenawaran @default(MENUNGGU)
   catatanSeller    String?
   metode           MetodeBayar?
+  
+  // Rekening Bank Seller ditaruh di sini jika mereka pilih TRANSFER
+  noRekeningSeller String?
+  namaRekeningSeller String?
+  bankSeller       String?
+
   buktiTransferUrl String?
   kwitansiUrl      String?
   createdAt        DateTime        @default(now())

@@ -24,6 +24,9 @@ export const responPenawaranSchema = z.object({
 	respon: z.enum(["DISETUJUI", "DITOLAK"]),
 	catatanSeller: z.string().optional(),
 	metode: z.enum(["TUNAI", "TRANSFER"]).optional(),
+	noRekeningSeller: z.string().optional(),
+	namaRekeningSeller: z.string().optional(),
+	bankSeller: z.string().optional(),
 });
 
 export const konfirmasiPembayaranSchema = z.object({

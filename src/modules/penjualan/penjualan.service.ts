@@ -323,6 +323,9 @@ export async function responPenawaranService(
 				respon: data.respon,
 				catatanSeller: data.catatanSeller,
 				metode: data.metode,
+				noRekeningSeller: data.noRekeningSeller,
+				namaRekeningSeller: data.namaRekeningSeller,
+				bankSeller: data.bankSeller,
 			},
 		}),
 		prisma.mobil.update({
