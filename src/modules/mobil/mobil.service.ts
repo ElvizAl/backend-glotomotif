@@ -110,9 +110,18 @@ export async function createMobilService(
 
 	// Upload semua foto
 	if (fotoBuffers.length > 0) {
-		const uploadedUrls = await Promise.all(
-			fotoBuffers.map((buf) => uploadImageToCloudinary(buf, "mobils")),
-		);
+		let uploadedUrls: string[];
+		try {
+			uploadedUrls = await Promise.all(
+				fotoBuffers.map((buf) => uploadImageToCloudinary(buf, "mobils")),
+			);
+		} catch (err) {
+			// Rollback: hapus mobil yang sudah dibuat jika upload foto gagal
+			await prisma.mobil.delete({ where: { id: mobil.id } });
+			const message =
+				err instanceof Error ? err.message : "Gagal mengupload foto";
+			throw new HTTPException(500, { message });
+		}
 
 		await prisma.fotomobil.createMany({
 			data: uploadedUrls.map((url, idx) => ({

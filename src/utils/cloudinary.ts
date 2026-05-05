@@ -9,6 +9,17 @@ cloudinary.config({
 });
 
 /**
+ * Checks if Cloudinary is properly configured
+ */
+const isCloudinaryConfigured = (): boolean => {
+	return !!(
+		env.CLOUDINARY_CLOUD_NAME &&
+		env.CLOUDINARY_API_KEY &&
+		env.CLOUDINARY_API_SECRET
+	);
+};
+
+/**
  * Uploads a file buffer to Cloudinary
  * @param buffer The file buffer to upload
  * @param folder The folder in Cloudinary to store the image
@@ -18,6 +29,12 @@ export const uploadImageToCloudinary = async (
 	buffer: Buffer,
 	folder = "products",
 ): Promise<string> => {
+	if (!isCloudinaryConfigured()) {
+		throw new Error(
+			"Cloudinary belum dikonfigurasi. Pastikan CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, dan CLOUDINARY_API_SECRET sudah diisi di environment variables.",
+		);
+	}
+
 	return new Promise((resolve, reject) => {
 		const uploadStream = cloudinary.uploader.upload_stream(
 			{
