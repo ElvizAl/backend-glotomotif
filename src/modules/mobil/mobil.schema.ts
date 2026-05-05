@@ -10,6 +10,7 @@ export const createMobilSchema = z.object({
 	bahan_bakar: z.string().optional(),
 	transmisi: z.enum(["MANUAL", "OTOMATIS"]).optional(),
 	harga: z.coerce.number().positive("Harga harus lebih dari 0"),
+	deskripsi: z.string().optional(),
 	status: z.enum(["TERSEDIA", "TERJUAL"]).optional().default("TERSEDIA"),
 });
 

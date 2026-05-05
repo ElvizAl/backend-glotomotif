@@ -104,6 +104,7 @@ export async function createMobilService(
 			bahan_bakar: data.bahan_bakar,
 			transmisi: data.transmisi,
 			harga: data.harga,
+			deskripsi: data.deskripsi,
 			status: data.status ?? "TERSEDIA",
 		},
 	});

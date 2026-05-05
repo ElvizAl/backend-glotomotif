@@ -60,6 +60,7 @@ export const mobilRouter = new Hono()
 			bahan_bakar: getStr("bahan_bakar"),
 			transmisi: getStr("transmisi"),
 			harga: getStr("harga"),
+			deskripsi: getStr("deskripsi"),
 			status: getStr("status"),
 		});
 
