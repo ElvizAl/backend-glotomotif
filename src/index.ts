@@ -1,3 +1,5 @@
+import "dotenv/config";
+
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
@@ -10,8 +12,6 @@ import { penjualanRouter } from "./modules/penjualan/penjualan.route";
 import { profileRouter } from "./modules/profile/profile.route";
 import { cronRouter } from "./modules/order/cron.route";
 import { userRouter } from "./modules/users/user.route";
-
-import "dotenv";
 
 const app = new Hono()
 	.basePath("api")

@@ -6,6 +6,11 @@
 			"dest": "src/index.ts"
 		}
 	],
+	"functions": {
+		"src/index.ts": {
+			"maxDuration": 30
+		}
+	},
 	"crons": [
 		{
 			"path": "/api/cron/check-expired",
